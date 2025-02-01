@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"github.com/Noooste/fhttp/http2"
+	"github.com/Noooste/quic-go"
+	"github.com/Noooste/quic-go/http3"
 	tls "github.com/Noooste/utls"
 	"net"
 	"time"
@@ -42,7 +45,89 @@ func (s *Session) dial(ctx context.Context, network, addr string) (net.Conn, err
 }
 
 func (s *Session) upgradeTLS(ctx context.Context, conn net.Conn, addr string) (net.Conn, error) {
-	// Split addr and port
+	if !s.InsecureSkipVerify {
+		if err := s.Pin(addr); err != nil {
+			return nil, errors.New("failed to pin: " + err.Error())
+		}
+	}
+
+	config, err := s.getTLSConfig(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	tlsConn := tls.UClient(conn, config, tls.HelloCustom)
+
+	var fn = s.GetClientHelloSpec
+	if fn == nil {
+		fn = GetBrowserClientHelloFunc(s.Browser)
+	}
+
+	specs := fn()
+
+	if v, k := ctx.Value(forceHTTP1Key).(bool); k && v {
+		for _, ext := range specs.Extensions {
+			switch ext.(type) {
+			case *tls.ALPNExtension:
+				ext.(*tls.ALPNExtension).AlpnProtocols = []string{"http/1.1"}
+			}
+		}
+
+		config.NextProtos = []string{"http/1.1"}
+	}
+
+	if err = tlsConn.ApplyPreset(specs); err != nil {
+		return nil, errors.New("failed to apply preset: " + err.Error())
+	}
+
+	if err = tlsConn.Handshake(); err != nil {
+		return nil, errors.New("failed to handshake: " + err.Error())
+	}
+
+	return tlsConn.Conn, nil
+}
+
+func (s *Session) http3Dialer(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+	udpConn, err := net.ListenUDP("udp", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	s.quicTransport = &quic.Transport{
+		Conn: udpConn,
+	}
+
+	var fn = s.GetClientHelloSpec
+	if fn == nil {
+		fn = GetBrowserClientHelloFunc(s.Browser)
+	}
+
+	tlsCfg, err = s.getTLSConfig(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	tlsCfg.ClientHelloSpec = fn()
+
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+
+	if err != nil {
+		return nil, errors.New("failed to resolve udp addr: " + err.Error())
+	}
+
+	for _, ext := range tlsCfg.ClientHelloSpec.Extensions {
+		switch ext.(type) {
+		case *tls.ALPNExtension:
+			ext.(*tls.ALPNExtension).AlpnProtocols = []string{http3.NextProtoH3, http2.NextProtoTLS, "http/1.1"}
+		}
+	}
+
+	tlsCfg.NextProtos = []string{http3.NextProtoH3, http2.NextProtoTLS, "http/1.1"}
+
+	return s.quicTransport.DialEarly(ctx, udpAddr, tlsCfg, cfg)
+}
+
+func (s *Session) getTLSConfig(addr string) (*tls.Config, error) {
 	hostname, _, err := net.SplitHostPort(addr)
 
 	if err != nil {
@@ -104,33 +189,5 @@ func (s *Session) upgradeTLS(ctx context.Context, conn net.Conn, addr string) (n
 		},
 	}
 
-	tlsConn := tls.UClient(conn, &config, tls.HelloCustom)
-
-	var fn = s.GetClientHelloSpec
-	if fn == nil {
-		fn = GetBrowserClientHelloFunc(s.Browser)
-	}
-
-	specs := fn()
-
-	if v, k := ctx.Value(forceHTTP1Key).(bool); k && v {
-		for _, ext := range specs.Extensions {
-			switch ext.(type) {
-			case *tls.ALPNExtension:
-				ext.(*tls.ALPNExtension).AlpnProtocols = []string{"http/1.1"}
-			}
-		}
-
-		config.NextProtos = []string{"http/1.1"}
-	}
-
-	if err = tlsConn.ApplyPreset(specs); err != nil {
-		return nil, errors.New("failed to apply preset: " + err.Error())
-	}
-
-	if err = tlsConn.Handshake(); err != nil {
-		return nil, errors.New("failed to handshake: " + err.Error())
-	}
-
-	return tlsConn.Conn, nil
+	return &config, nil
 }

@@ -150,7 +150,12 @@ func (s *Session) send(request *Request) (response *Response, err error) {
 		return nil, err
 	}
 
-	roundTripper = s.Transport
+	if s.UseHTTP3 {
+		roundTripper = s.HTTP3Transport
+	} else {
+		roundTripper = s.Transport
+	}
+
 	s.logRequest(request)
 
 	if request.ForceHTTP1 {

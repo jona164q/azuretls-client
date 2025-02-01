@@ -122,6 +122,11 @@ func (s *Session) buildRequest(ctx context.Context, req *Request) (err error) {
 
 	req.formatHeader()
 
+	if s.UseHTTP3 {
+		req.HttpRequest.Header.Del(http.PHeaderOrderKey)
+		req.HttpRequest.Header.Del(http.HeaderOrderKey)
+	}
+
 	if !req.NoCookie {
 		cookies := s.CookieJar.Cookies(req.HttpRequest.URL)
 		if cookies != nil && len(cookies) > 0 {

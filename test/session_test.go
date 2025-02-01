@@ -670,3 +670,18 @@ func TestSession_Timeout2(t *testing.T) {
 		return
 	}
 }
+
+func TestSession_HTTP3(t *testing.T) {
+	session := azuretls.NewSession()
+	defer session.Close()
+
+	session.UseHTTP3 = true
+
+	resp, err := session.Get("https://www.google.com/")
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Print(resp.Status)
+}

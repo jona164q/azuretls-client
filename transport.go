@@ -3,6 +3,7 @@ package azuretls
 import (
 	http "github.com/Noooste/fhttp"
 	"github.com/Noooste/fhttp/http2"
+	"github.com/Noooste/quic-go/http3"
 	"time"
 )
 
@@ -16,6 +17,12 @@ func (s *Session) InitTransport(browser string) (err error) {
 
 	if s.HTTP2Transport == nil {
 		if err = s.initHTTP2(browser); err != nil {
+			return
+		}
+	}
+
+	if s.HTTP3Transport == nil {
+		if err = s.initHTTP3(browser); err != nil {
 			return
 		}
 	}
@@ -66,6 +73,14 @@ func (s *Session) initHTTP2(browser string) error {
 	}
 
 	s.HTTP2Transport = tr
+
+	return nil
+}
+
+func (s *Session) initHTTP3(browser string) error {
+	s.HTTP3Transport = &http3.Transport{
+		Dial: s.http3Dialer,
+	}
 
 	return nil
 }

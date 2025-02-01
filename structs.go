@@ -5,6 +5,8 @@ import (
 	"errors"
 	http "github.com/Noooste/fhttp"
 	"github.com/Noooste/fhttp/http2"
+	"github.com/Noooste/quic-go"
+	"github.com/Noooste/quic-go/http3"
 	tls "github.com/Noooste/utls"
 	"io"
 	"net"
@@ -42,8 +44,12 @@ type Session struct {
 	// Name or identifier of the browser used in the session.
 	Browser string
 
-	HTTP2Transport *http2.Transport
 	Transport      *http.Transport
+	HTTP2Transport *http2.Transport
+
+	UseHTTP3       bool
+	HTTP3Transport *http3.Transport
+	quicTransport  *quic.Transport
 
 	// Function to provide custom TLS handshake details.
 	GetClientHelloSpec func() *tls.ClientHelloSpec
