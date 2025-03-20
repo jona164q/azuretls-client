@@ -1,9 +1,14 @@
 package azuretls
 
 import (
+	"context"
 	http "github.com/Noooste/fhttp"
 	"github.com/Noooste/fhttp/http2"
+	"github.com/Noooste/quic-go"
 	"github.com/Noooste/quic-go/http3"
+	tls "github.com/Noooste/utls"
+	"github.com/wzshiming/socks5"
+	"net"
 	"time"
 )
 
@@ -79,8 +84,54 @@ func (s *Session) initHTTP2(browser string) error {
 
 func (s *Session) initHTTP3(browser string) error {
 	s.HTTP3Transport = &http3.Transport{
-		Dial: s.http3Dialer,
+		Dial: proxyDial(s.Proxy),
 	}
 
 	return nil
+}
+
+// for QUIC protocol (quic-go)
+type sConnWrapper struct {
+	net.PacketConn
+}
+
+func (c *sConnWrapper) SetReadBuffer(bytes int) error {
+	socks5udpConn := c.PacketConn.(*socks5.UDPConn)
+	udpConn := socks5udpConn.PacketConn.(*net.UDPConn)
+
+	return udpConn.SetReadBuffer(bytes)
+}
+
+func (c *sConnWrapper) SetWriteBuffer(bytes int) error {
+	socks5udpConn := c.PacketConn.(*socks5.UDPConn)
+	udpConn := socks5udpConn.PacketConn.(*net.UDPConn)
+
+	return udpConn.SetWriteBuffer(bytes)
+}
+
+func proxyDial(proxyURL string) func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+	dialer, err := socks5.NewDialer(proxyURL)
+	if err != nil {
+		panic(err)
+	}
+
+	return func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+		proxyConn, err := dialer.DialContext(ctx, "udp", addr)
+		if err != nil {
+			return nil, err
+		}
+
+		remoteAddr, err := net.ResolveUDPAddr("udp", addr)
+		if err != nil {
+			return nil, err
+		}
+
+		connWrapper := &sConnWrapper{proxyConn.(net.PacketConn)}
+		earlyConn, err := quic.DialEarly(ctx, connWrapper, remoteAddr, tlsCfg, cfg)
+		if err != nil {
+			return nil, err
+		}
+
+		return earlyConn, nil
+	}
 }

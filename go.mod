@@ -4,14 +4,15 @@ go 1.22.0
 
 require (
 	github.com/Noooste/fhttp v1.0.12
+	github.com/Noooste/quic-go v0.0.2
 	github.com/Noooste/utls v1.3.1
 	github.com/Noooste/websocket v1.0.3
 	github.com/fatih/color v1.18.0
+	github.com/wzshiming/socks5 v0.5.1
 	golang.org/x/net v0.34.0
 )
 
 require (
-	github.com/Noooste/quic-go v0.0.2 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/cloudflare/circl v1.5.0 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect

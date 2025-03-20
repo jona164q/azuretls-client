@@ -9,6 +9,7 @@ import (
 	http "github.com/Noooste/fhttp"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -671,17 +672,24 @@ func TestSession_Timeout2(t *testing.T) {
 	}
 }
 
+var regIp = regexp.MustCompile(`<span class="hidden" id="cf-footer-ip">(.+?)</span>`)
+
 func TestSession_HTTP3(t *testing.T) {
 	session := azuretls.NewSession()
 	defer session.Close()
 
+	if err := session.SetProxy("socks5h://user-spwyvo5xw3-session-1-sessionduration-60-country-fr:ADdR8p25sygcg4kRfo@gate.smartproxy.com:7000"); err != nil {
+		t.Fatal(err)
+	}
+
 	session.UseHTTP3 = true
 
-	resp, err := session.Get("https://www.google.com/")
+	resp, err := session.Get("https://dev.azureaio.com/")
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fmt.Print(resp.Status)
+	fmt.Println(resp.HttpResponse.Proto)
+	fmt.Println(regIp.FindStringSubmatch(string(resp.Body))[1])
 }
